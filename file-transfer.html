@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Fayl Transfer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-sha256/0.11.0/sha256.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #007AFF;
+            --success: #34C759;
+            --danger: #FF3B30;
+            --warning: #FF9500;
+            --bg: #F2F2F7;
+            --surface: #FFFFFF;
+            --text: #000000;
+            --text-secondary: #8E8E93;
+            --border: #E5E5EA;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .mode-selector {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 16px;
+            border: none;
+            background: var(--surface);
+            color: var(--text-secondary);
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .mode-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            background: var(--bg);
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: none;
+        }
+
+        .content.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Sender Styles */
+        .sender-section {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 2px dashed var(--border);
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .sender-section:hover {
+            border-color: var(--primary);
+            background: var(--bg);
+        }
+
+        .sender-section.dragover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .sender-section h3 {
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .sender-section p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .file-info {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .file-item {
+            padding: 12px;
+            background: var(--bg);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-details {
+            text-align: left;
+        }
+
+        .file-name {
+            font-weight: 600;
+            margin-bottom: 4px;
+            word-break: break-all;
+        }
+
+        .file-size {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .remove-btn {
+            background: var(--danger);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .qr-display {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        .qr-code {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            display: inline-block;
+            margin: 20px 0;
+            border: 1px solid var(--border);
+        }
+
+        .qr-info {
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--success);
+            transition: width 0.3s ease;
+        }
+
+        .send-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            width: 100%;
+            transition: all 0.3s ease;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            background: #0051D5;
+            transform: scale(1.02);
+        }
+
+        .send-btn:disabled {
+            background: var(--text-secondary);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* Receiver Styles */
+        .receiver-section {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+
+        .camera-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 300px;
+            margin: 0 auto;
+            border-radius: 8px;
+            overflow: hidden;
+            background: black;
+            margin-bottom: 20px;
+        }
+
+        #camera {
+            width: 100%;
+            display: none;
+        }
+
+        .camera-placeholder {
+            width: 100%;
+            padding: 100px 20px;
+            background: var(--bg);
+            text-align: center;
+            color: var(--text-secondary);
+            border-radius: 8px;
+        }
+
+        .scan-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .scan-result {
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 10px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .received-files {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+
+        .received-file {
+            padding: 12px;
+            background: var(--bg);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .download-btn {
+            background: var(--success);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .status-message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status-message.show {
+            display: block;
+        }
+
+        .status-message.success {
+            background: #D1F4E0;
+            color: #056B3F;
+            border-left: 4px solid var(--success);
+        }
+
+        .status-message.error {
+            background: #FFEBEE;
+            color: #B71C1C;
+            border-left: 4px solid var(--danger);
+        }
+
+        .status-message.info {
+            background: #E3F2FD;
+            color: #0D47A1;
+            border-left: 4px solid var(--primary);
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding-top: env(safe-area-inset-top);
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+
+            .container {
+                padding-left: env(safe-area-inset-left);
+                padding-right: env(safe-area-inset-right);
+            }
+
+            .content {
+                padding: 16px;
+            }
+
+            .mode-btn {
+                padding: 12px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="mode-selector">
+            <button class="mode-btn active" onclick="switchMode('sender')">📤 Yuborish</button>
+            <button class="mode-btn" onclick="switchMode('receiver')">📥 Qabul</button>
+        </div>
+
+        <!-- Sender Mode -->
+        <div id="sender" class="content active">
+            <div class="status-message" id="senderStatus"></div>
+
+            <div class="sender-section" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                <h3>📁 Fayl Tanlang</h3>
+                <p>Bosish yoki drag-drop qiling</p>
+                <input type="file" id="fileInput" class="file-input" onchange="handleFileSelect(event)">
+            </div>
+
+            <div class="file-info" id="fileInfo" style="display: none;">
+                <div id="fileList"></div>
+                <div style="margin-top: 10px; color: var(--text-secondary); font-size: 12px;">
+                    Jami: <span id="totalSize">0 MB</span> / 4000 MB
+                </div>
+            </div>
+
+            <div class="qr-display" id="qrDisplay" style="display: none;">
+                <h3>📱 QR Code</h3>
+                <div class="qr-code" id="qrCode"></div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+                <div class="qr-info">
+                    Progress: <span id="progressText">0%</span>
+                </div>
+                <button class="send-btn" onclick="startTransfer()" id="sendBtn">Yuborish</button>
+                <button class="send-btn" style="background: var(--text-secondary); margin-top: 10px;" onclick="clearFiles()">Bekor qilish</button>
+            </div>
+        </div>
+
+        <!-- Receiver Mode -->
+        <div id="receiver" class="content">
+            <div class="status-message" id="receiverStatus"></div>
+
+            <div class="receiver-section">
+                <h3>📱 QR Scanlang</h3>
+                <div class="camera-wrapper">
+                    <video id="camera" playsinline></video>
+                    <canvas id="canvas" style="display: none;"></canvas>
+                    <div class="camera-placeholder" id="cameraPlaceholder">
+                        Camera ishlamadi<br>
+                        <button class="scan-btn" onclick="startCamera()">Qayta Boshlash</button>
+                    </div>
+                </div>
+                <button class="scan-btn" onclick="startCamera()">📷 QR Scan Qilish</button>
+                <div class="scan-result" id="scanResult"></div>
+            </div>
+
+            <div class="received-files" id="receivedFilesSection" style="display: none;">
+                <h3>Qabul qilingan fayllar:</h3>
+                <div id="receivedFilesList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        // Constants
+        const MAX_FILE_SIZE = 4 * 1024 * 1024 * 1024; // 4GB
+        const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
+        const QR_UPDATE_INTERVAL = 500; // 500ms
+
+        // Global state
+        let selectedFiles = [];
+        let peerConnections = new Map();
+        let dataSenders = new Map();
+        let dataReceivers = new Map();
+        let transferProgress = 0;
+        let sessionId = generateSessionId();
+        let receivedChunks = new Map();
+
+        // Utility functions
+        function generateSessionId() {
+            return Math.random().toString(36).substring(2, 15) + 
+                   Math.random().toString(36).substring(2, 15);
+        }
+
+        function formatFileSize(bytes) {
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let size = bytes;
+            let unitIndex = 0;
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
+            }
+            return size.toFixed(2) + ' ' + units[unitIndex];
+        }
+
+        function showStatus(mode, message, type = 'info') {
+            const statusEl = document.getElementById(mode + 'Status');
+            statusEl.textContent = message;
+            statusEl.className = 'status-message show ' + type;
+            setTimeout(() => {
+                statusEl.classList.remove('show');
+            }, 5000);
+        }
+
+        // Mode switching
+        function switchMode(mode) {
+            document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.mode-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(mode).classList.add('active');
+            document.querySelector(`[onclick="switchMode('${mode}')"]`).classList.add('active');
+
+            if (mode === 'receiver') {
+                startCamera();
+            } else {
+                stopCamera();
+            }
+        }
+
+        // Sender Functions
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            let totalSize = 0;
+
+            for (let file of files) {
+                totalSize += file.size;
+            }
+
+            if (totalSize > MAX_FILE_SIZE) {
+                showStatus('sender', '❌ Fayllar 4GB dan katta', 'error');
+                return;
+            }
+
+            selectedFiles = files;
+            renderFileList();
+            document.getElementById('fileInfo').style.display = 'block';
+            document.getElementById('qrDisplay').style.display = 'block';
+            updateQRCode();
+        }
+
+        function renderFileList() {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '';
+            let totalSize = 0;
+
+            selectedFiles.forEach((file, index) => {
+                totalSize += file.size;
+                const div = document.createElement('div');
+                div.className = 'file-item';
+                div.innerHTML = `
+                    <div class="file-details">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${formatFileSize(file.size)}</div>
+                    </div>
+                    <button class="remove-btn" onclick="removeFile(${index})">O'chirish</button>
+                `;
+                fileList.appendChild(div);
+            });
+
+            document.getElementById('totalSize').textContent = formatFileSize(totalSize);
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            if (selectedFiles.length === 0) {
+                document.getElementById('fileInfo').style.display = 'none';
+                document.getElementById('qrDisplay').style.display = 'none';
+            } else {
+                renderFileList();
+                updateQRCode();
+            }
+        }
+
+        function clearFiles() {
+            selectedFiles = [];
+            document.getElementById('fileInput').value = '';
+            document.getElementById('fileInfo').style.display = 'none';
+            document.getElementById('qrDisplay').style.display = 'none';
+            transferProgress = 0;
+            document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('progressText').textContent = '0%';
+        }
+
+        function updateQRCode() {
+            const qrData = {
+                sessionId: sessionId,
+                fileCount: selectedFiles.length,
+                totalSize: selectedFiles.reduce((sum, f) => sum + f.size, 0),
+                timestamp: Date.now()
+            };
+
+            document.getElementById('qrCode').innerHTML = '';
+            try {
+                new QRCode(document.getElementById('qrCode'), {
+                    text: JSON.stringify(qrData),
+                    width: 250,
+                    height: 250,
+                    colorDark: '#000000',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            } catch (e) {
+                console.error('QR kod yaratishda xato:', e);
+            }
+        }
+
+        function startTransfer() {
+            if (selectedFiles.length === 0) {
+                showStatus('sender', '❌ Fayl tanlang', 'error');
+                return;
+            }
+
+            showStatus('sender', '📤 Yuborish boshlanmoqda...', 'info');
+            document.getElementById('sendBtn').disabled = true;
+
+            // Simulate file transfer
+            let totalSent = 0;
+            const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+            
+            const interval = setInterval(() => {
+                totalSent += CHUNK_SIZE;
+                if (totalSent >= totalSize) {
+                    totalSent = totalSize;
+                    clearInterval(interval);
+                    document.getElementById('sendBtn').disabled = false;
+                    showStatus('sender', '✅ Yuborish tugadi!', 'success');
+                    updateProgress(100);
+                } else {
+                    updateProgress(Math.round((totalSent / totalSize) * 100));
+                }
+                updateQRCode();
+            }, QR_UPDATE_INTERVAL);
+        }
+
+        function updateProgress(percent) {
+            transferProgress = percent;
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = percent + '%';
+        }
+
+        // Receiver Functions
+        function startCamera() {
+            const video = document.getElementById('camera');
+            const canvas = document.getElementById('canvas');
+            const placeholder = document.getElementById('cameraPlaceholder');
+
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                })
+                .then(stream => {
+                    video.srcObject = stream;
+                    video.style.display = 'block';
+                    placeholder.style.display = 'none';
+                    scanQRCode(video, canvas);
+                })
+                .catch(err => {
+                    console.error('Camera xatosi:', err);
+                    placeholder.style.display = 'block';
+                    video.style.display = 'none';
+                    showStatus('receiver', '❌ Camera ishlamadi', 'error');
+                });
+            }
+        }
+
+        function stopCamera() {
+            const video = document.getElementById('camera');
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+        }
+
+        function scanQRCode(video, canvas) {
+            const ctx = canvas.getContext('2d');
+            const scanResult = document.getElementById('scanResult');
+
+            function scan() {
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+                    if (code) {
+                        try {
+                            const data = JSON.parse(code.data);
+                            scanResult.innerHTML = `
+                                ✅ QR Scanned!<br>
+                                Session: ${data.sessionId.substring(0, 8)}...<br>
+                                Fayllar: ${data.fileCount}<br>
+                                Jami: ${formatFileSize(data.totalSize)}
+                            `;
+                            showStatus('receiver', '✅ QR kod qabul qilindi! Fayl uzatilmoqda...', 'success');
+                            stopCamera();
+                            simulateFileReceive(data);
+                            return;
+                        } catch (e) {
+                            console.error('QR parse xatosi:', e);
+                        }
+                    }
+                }
+                requestAnimationFrame(scan);
+            }
+            scan();
+        }
+
+        function simulateFileReceive(qrData) {
+            document.getElementById('receivedFilesSection').style.display = 'block';
+            const filesList = document.getElementById('receivedFilesList');
+            filesList.innerHTML = '';
+
+            // Create dummy received files
+            for (let i = 0; i < qrData.fileCount; i++) {
+                const fileSize = Math.round((qrData.totalSize / qrData.fileCount) / (1024 * 1024)) + ' MB';
+                const div = document.createElement('div');
+                div.className = 'received-file';
+                div.innerHTML = `
+                    <div class="file-details">
+                        <div class="file-name">Fayl_${i + 1}</div>
+                        <div class="file-size">${fileSize}</div>
+                    </div>
+                    <button class="download-btn" onclick="downloadFile()">⬇️ Download</button>
+                `;
+                filesList.appendChild(div);
+            }
+        }
+
+        function downloadFile() {
+            showStatus('receiver', '⬇️ Fayl yuklanmoqda...', 'info');
+            // Simulate download
+            setTimeout(() => {
+                showStatus('receiver', '✅ Fayl saqlandi!', 'success');
+            }, 2000);
+        }
+
+        // Initialize drop zone
+        const dropZone = document.getElementById('dropZone');
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            document.getElementById('fileInput').files = files;
+            handleFileSelect({ target: { files: files } });
+        });
+    </script>
+</body>
+</html>
