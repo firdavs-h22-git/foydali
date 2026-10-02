@@ -603,119 +603,31 @@
             const canvas = document.getElementById('canvas');
             const placeholder = document.getElementById('cameraPlaceholder');
 
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                })
-                .then(stream => {
-                    video.srcObject = stream;
-                    video.style.display = 'block';
-                    placeholder.style.display = 'none';
-                    scanQRCode(video, canvas);
-                })
-                .catch(err => {
-                    console.error('Camera xatosi:', err);
-                    placeholder.style.display = 'block';
-                    video.style.display = 'none';
-                    showStatus('receiver', '❌ Camera ishlamadi', 'error');
-                });
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showStatus('receiver', '❌ Browser kamera qoʻllab-quvvatlamaydi', 'error');
+                placeholder.innerHTML = 'Browser kamera qoʻllab-quvvatlamaydi';
+                return;
             }
-        }
 
-        function stopCamera() {
-            const video = document.getElementById('camera');
-            if (video.srcObject) {
-                video.srcObject.getTracks().forEach(track => track.stop());
-            }
-        }
-
-        function scanQRCode(video, canvas) {
-            const ctx = canvas.getContext('2d');
-            const scanResult = document.getElementById('scanResult');
-
-            function scan() {
-                if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-                    if (code) {
-                        try {
-                            const data = JSON.parse(code.data);
-                            scanResult.innerHTML = `
-                                ✅ QR Scanned!<br>
-                                Session: ${data.sessionId.substring(0, 8)}...<br>
-                                Fayllar: ${data.fileCount}<br>
-                                Jami: ${formatFileSize(data.totalSize)}
-                            `;
-                            showStatus('receiver', '✅ QR kod qabul qilindi! Fayl uzatilmoqda...', 'success');
-                            stopCamera();
-                            simulateFileReceive(data);
-                            return;
-                        } catch (e) {
-                            console.error('QR parse xatosi:', e);
-                        }
-                    }
-                }
-                requestAnimationFrame(scan);
-            }
-            scan();
-        }
-
-        function simulateFileReceive(qrData) {
-            document.getElementById('receivedFilesSection').style.display = 'block';
-            const filesList = document.getElementById('receivedFilesList');
-            filesList.innerHTML = '';
-
-            // Create dummy received files
-            for (let i = 0; i < qrData.fileCount; i++) {
-                const fileSize = Math.round((qrData.totalSize / qrData.fileCount) / (1024 * 1024)) + ' MB';
-                const div = document.createElement('div');
-                div.className = 'received-file';
-                div.innerHTML = `
-                    <div class="file-details">
-                        <div class="file-name">Fayl_${i + 1}</div>
-                        <div class="file-size">${fileSize}</div>
-                    </div>
-                    <button class="download-btn" onclick="downloadFile()">⬇️ Download</button>
-                `;
-                filesList.appendChild(div);
-            }
-        }
-
-        function downloadFile() {
-            showStatus('receiver', '⬇️ Fayl yuklanmoqda...', 'info');
-            // Simulate download
-            setTimeout(() => {
-                showStatus('receiver', '✅ Fayl saqlandi!', 'success');
-            }, 2000);
-        }
-
-        // Initialize drop zone
-        const dropZone = document.getElementById('dropZone');
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('dragover');
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            document.getElementById('fileInput').files = files;
-            handleFileSelect({ target: { files: files } });
-        });
-    </script>
-</body>
-</html>
+            navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    aspectRatio: { ideal: 1.777 }
+                },
+                audio: false
+            })
+            .then(stream => {
+                stopCamera();
+                video.setAttribute('playsinline', '');
+                video.setAttribute('autoplay', '');
+                video.muted = true;
+                video.srcObject = stream;
+                video.style.display = 'block';
+                placeholder.style.display = 'none';
+                video.onloadedmetadata = () => {
+                    video.play().then(() => {
+                        scanQRCode(video, canvas);
+                        showStatus('receiver', '✅ Kamera faollashtirildi', 'success');
+                    }).
